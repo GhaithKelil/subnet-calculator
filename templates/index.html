@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Planner</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d2e;
+            --surface2: #252840;
+            --border: #2e3150;
+            --blue: #4f8ef7;
+            --green: #3ecf8e;
+            --red: #f76f6f;
+            --yellow: #f7c84f;
+            --text: #e2e4f0;
+            --muted: #6b7199;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+        header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 1rem; }
+        header .logo { width: 36px; height: 36px; background: var(--blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #0f1117; font-size: 1.1rem; }
+        header h1 { font-size: 1.2rem; font-weight: 600; }
+        header p { font-size: 0.85rem; color: var(--muted); }
+
+        .layout { display: flex; min-height: calc(100vh - 72px); }
+        .sidebar { width: 220px; border-right: 1px solid var(--border); padding: 1.5rem 1rem; flex-shrink: 0; }
+        .nav-item { padding: 0.6rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.9rem; color: var(--muted); display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.25rem; transition: all 0.15s; }
+        .nav-item:hover { background: var(--surface); color: var(--text); }
+        .nav-item.active { background: var(--surface2); color: var(--blue); font-weight: 600; }
+        .nav-icon { font-size: 1rem; }
+
+        .main { flex: 1; padding: 2rem; max-width: 900px; }
+        h2 { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.4rem; }
+        .page-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .card-title { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 1rem; }
+
+        .input-row { display: flex; gap: 0.75rem; }
+        input[type=text], input[type=number] {
+            background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text); font-size: 0.95rem; padding: 0.65rem 1rem; outline: none; transition: border 0.15s;
+        }
+        input[type=text]:focus, input[type=number]:focus { border-color: var(--blue); }
+        .input-full { width: 100%; margin-bottom: 1rem; }
+
+        .btn { padding: 0.65rem 1.25rem; border-radius: 8px; border: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: var(--blue); color: #0f1117; }
+        .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+        .btn-green { background: var(--green); color: #0f1117; }
+        .btn-sm { padding: 0.45rem 0.9rem; font-size: 0.82rem; }
+
+        .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+        .result-row { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+        .result-row:last-child { border-bottom: none; }
+        .result-label { font-size: 0.85rem; color: var(--muted); }
+        .result-value { font-size: 0.9rem; font-weight: 600; font-family: 'Courier New', monospace; }
+
+        .badge { padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+        .badge-green { background: rgba(62,207,142,0.15); color: var(--green); }
+        .badge-red { background: rgba(247,111,111,0.15); color: var(--red); }
+
+        .error-box { background: rgba(247,111,111,0.1); border: 1px solid rgba(247,111,111,0.3); color: var(--red); padding: 0.9rem 1rem; border-radius: 8px; font-size: 0.9rem; margin-bottom: 1rem; }
+
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; text-align: center; }
+        .stat-num { font-size: 1.6rem; font-weight: 700; }
+        .stat-lbl { font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; }
+        .stat-blue { color: var(--blue); }
+        .stat-green { color: var(--green); }
+        .stat-red { color: var(--red); }
+        .stat-yellow { color: var(--yellow); }
+
+        .subnet-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; border-left: 3px solid var(--blue); }
+        .subnet-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .subnet-name { font-weight: 700; font-size: 1rem; }
+        .subnet-cidr { font-family: monospace; background: var(--surface2); padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.85rem; color: var(--blue); }
+
+        .map-container { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .map-bar { height: 40px; border-radius: 8px; display: flex; overflow: hidden; margin-bottom: 1rem; }
+        .map-segment { height: 100%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600; color: #0f1117; overflow: hidden; white-space: nowrap; transition: opacity 0.15s; min-width: 2px; }
+        .map-segment:hover { opacity: 0.8; cursor: default; }
+        .map-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+        .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+        .req-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; }
+        .req-row input { margin-bottom: 0; }
+        .req-name { flex: 2; }
+        .req-hosts { flex: 1; }
+        .remove-btn { background: rgba(247,111,111,0.15); color: var(--red); border: none; border-radius: 6px; padding: 0.5rem 0.75rem; cursor: pointer; font-size: 1rem; flex-shrink: 0; }
+        .add-row-btn { background: none; border: 1px dashed var(--border); color: var(--muted); border-radius: 8px; padding: 0.5rem 1rem; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 1rem; transition: all 0.15s; }
+        .add-row-btn:hover { border-color: var(--blue); color: var(--blue); }
+
+        .export-row { display: flex; gap: 0.75rem; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">N</div>
+    <div>
+        <h1>Network Planner</h1>
+        <p>Subnet Calculator & VLSM Planner</p>
+    </div>
+</header>
+
+<div class="layout">
+    <div class="sidebar">
+        <div class="nav-item {% if active_tab == 'subnet' %}active{% endif %}" onclick="switchTab('subnet')">
+            <span class="nav-icon">⊞</span> Subnet Calc
+        </div>
+        <div class="nav-item {% if active_tab == 'vlsm' %}active{% endif %}" onclick="switchTab('vlsm')">
+            <span class="nav-icon">⋱</span> VLSM Planner
+        </div>
+    </div>
+
+    <div class="main">
+
+        <!-- Subnet Tab -->
+        <div class="panel {% if active_tab == 'subnet' %}active{% endif %}" id="tab-subnet">
+            <h2>Subnet Calculator</h2>
+            <p class="page-desc">Enter an IP with CIDR notation or subnet mask</p>
+
+            <div class="card">
+                <div class="card-title">Input</div>
+                <form method="POST">
+                    <div class="input-row">
+                        <input class="input-full" type="text" name="ip_input" value="{{ user_input }}" placeholder="192.168.1.1/24  or  192.168.1.1 255.255.255.0" style="flex:1; margin-bottom:0;">
+                        <button class="btn btn-primary" type="submit">Calculate</button>
+                    </div>
+                </form>
+            </div>
+
+            {% if subnet_result %}
+                {% if subnet_result.error %}
+                    <div class="error-box">{{ subnet_result.error }}</div>
+                {% else %}
+                <div class="card">
+                    <div class="card-title">Results</div>
+                    <div class="result-row"><span class="result-label">IP Address</span><span class="result-value">{{ subnet_result.ip }}</span></div>
+                    <div class="result-row"><span class="result-label">Network Address</span><span class="result-value">{{ subnet_result.network }}</span></div>
+                    <div class="result-row"><span class="result-label">Broadcast</span><span class="result-value">{{ subnet_result.broadcast }}</span></div>
+                    <div class="result-row"><span class="result-label">Subnet Mask</span><span class="result-value">{{ subnet_result.subnet_mask }}</span></div>
+                    <div class="result-row"><span class="result-label">Wildcard Mask</span><span class="result-value">{{ subnet_result.wildcard }}</span></div>
+                    <div class="result-row"><span class="result-label">CIDR Notation</span><span class="result-value">/{{ subnet_result.cidr }}</span></div>
+                    <div class="result-row"><span class="result-label">First Usable Host</span><span class="result-value">{{ subnet_result.first_host }}</span></div>
+                    <div class="result-row"><span class="result-label">Last Usable Host</span><span class="result-value">{{ subnet_result.last_host }}</span></div>
+                    <div class="result-row"><span class="result-label">Usable Hosts</span><span class="result-value">{{ subnet_result.num_hosts }}</span></div>
+                    <div class="result-row"><span class="result-label">IP Type</span><span class="result-value"><span class="badge {{ 'badge-green' if subnet_result.ip_type == 'Private' else 'badge-red' }}">{{ subnet_result.ip_type }}</span></span></div>
+                </div>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        <!-- VLSM Tab -->
+        <div class="panel {% if active_tab == 'vlsm' %}active{% endif %}" id="tab-vlsm">
+            <h2>VLSM Planner</h2>
+            <p class="page-desc">Efficiently divide a network into subnets of different sizes</p>
+
+            <div class="card">
+                <div class="card-title">Network & Requirements</div>
+                <form method="POST" id="vlsm-form">
+                    <input class="input-full" type="text" name="vlsm_network" placeholder="Base network e.g. 192.168.1.0/24">
+                    <div id="requirements">
+                        <div class="req-row">
+                            <input class="req-name" type="text" name="req_name" placeholder="Subnet name (e.g. LAN A)">
+                            <input class="req-hosts" type="number" name="req_hosts" placeholder="Hosts" min="1">
+                            <button type="button" class="remove-btn" onclick="removeRow(this)">×</button>
+                        </div>
+                    </div>
+                    <button type="button" class="add-row-btn" onclick="addRow()">+ Add subnet requirement</button>
+                    <button class="btn btn-primary" type="submit">Calculate VLSM</button>
+                </form>
+            </div>
+
+            {% if vlsm_result %}
+                {% if vlsm_result.error %}
+                    <div class="error-box">{{ vlsm_result.error }}</div>
+                {% else %}
+
+                <div class="stats-row">
+                    <div class="stat-card"><div class="stat-num stat-blue">{{ vlsm_result.total_needed }}</div><div class="stat-lbl">Hosts Needed</div></div>
+                    <div class="stat-card"><div class="stat-num stat-green">{{ vlsm_result.total_allocated }}</div><div class="stat-lbl">Hosts Allocated</div></div>
+                    <div class="stat-card"><div class="stat-num stat-red">{{ vlsm_result.total_wasted }}</div><div class="stat-lbl">Addresses Wasted</div></div>
+                    <div class="stat-card"><div class="stat-num {{ 'stat-green' if vlsm_result.efficiency >= 70 else 'stat-yellow' }}">{{ vlsm_result.efficiency }}%</div><div class="stat-lbl">Efficiency</div></div>
+                </div>
+
+                <!-- Visual Map -->
+                {% set colors_list = ['#4f8ef7','#3ecf8e','#f7c84f','#f76f6f','#b06ff7','#f7934f','#4ff7e8','#f74fb0'] %}
+                <div class="map-container">
+                    <div class="card-title">Address Space Map</div>
+                    <div class="map-bar">
+                        {% for s in vlsm_result.subnets %}
+                        {% set pct = (s.size / vlsm_result.total_size * 100)|round(2) %}
+                        {% set color = colors_list[loop.index0 % colors_list|length] %}
+                        <div class="map-segment" style="width: {{ pct }}%; background: {{ color }};" title="{{ s.name }}: {{ s.network }}/{{ s.cidr }}">
+                            {% if pct > 5 %}{{ s.name }}{% endif %}
+                        </div>
+                        {% endfor %}
+                        {% if vlsm_result.free_size > 0 %}
+                        {% set free_pct = (vlsm_result.free_size / vlsm_result.total_size * 100)|round(2) %}
+                        <div class="map-segment" style="width: {{ free_pct }}%; background: #2e3150;" title="Free: {{ vlsm_result.free_size }} addresses">
+                            {% if free_pct > 5 %}Free{% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="map-legend">
+                        {% for s in vlsm_result.subnets %}
+                        {% set color = colors_list[loop.index0 % colors_list|length] %}
+                        <div class="legend-item">
+                            <div class="legend-dot" style="background: {{ color }};"></div>
+                            <span>{{ s.name }} ({{ s.network }}/{{ s.cidr }})</span>
+                        </div>
+                        {% endfor %}
+                        {% if vlsm_result.free_size > 0 %}
+                        <div class="legend-item">
+                            <div class="legend-dot" style="background: #2e3150; border: 1px solid #4a4f70;"></div>
+                            <span>Free ({{ vlsm_result.free_size }} addresses)</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Subnet Cards -->
+                {% for s in vlsm_result.subnets %}
+                {% set color = colors_list[loop.index0 % colors_list|length] %}
+                <div class="subnet-card" style="border-left-color: {{ color }};">
+                    <div class="subnet-header">
+                        <span class="subnet-name">{{ s.name }}</span>
+                        <span class="subnet-cidr">{{ s.network }}/{{ s.cidr }}</span>
+                    </div>
+                    <div class="result-row"><span class="result-label">Subnet Mask</span><span class="result-value">{{ s.subnet_mask }}</span></div>
+                    <div class="result-row"><span class="result-label">Broadcast</span><span class="result-value">{{ s.broadcast }}</span></div>
+                    <div class="result-row"><span class="result-label">Host Range</span><span class="result-value">{{ s.first_host }} — {{ s.last_host }}</span></div>
+                    <div class="result-row"><span class="result-label">Usable Hosts</span><span class="result-value">{{ s.usable_hosts }}</span></div>
+                    <div class="result-row"><span class="result-label">Hosts Needed</span><span class="result-value">{{ s.needed_hosts }}</span></div>
+                    <div class="result-row"><span class="result-label">Addresses Wasted</span><span class="result-value">{{ s.wasted }}</span></div>
+                </div>
+                {% endfor %}
+
+                <!-- Export -->
+                <div class="card">
+                    <div class="card-title">Export Plan</div>
+                    <div class="export-row">
+                        <form method="POST" action="/export/csv">
+                            {% for s in vlsm_result.subnets %}
+                            <input type="hidden" name="req_name" value="{{ s.name }}">
+                            <input type="hidden" name="req_hosts" value="{{ s.needed_hosts }}">
+                            {% endfor %}
+                            <input type="hidden" name="vlsm_network" value="{{ vlsm_result.network }}">
+                            <button class="btn btn-ghost btn-sm" type="submit">⬇ Export CSV</button>
+                        </form>
+                        <form method="POST" action="/export/pdf">
+                            {% for s in vlsm_result.subnets %}
+                            <input type="hidden" name="req_name" value="{{ s.name }}">
+                            <input type="hidden" name="req_hosts" value="{{ s.needed_hosts }}">
+                            {% endfor %}
+                            <input type="hidden" name="vlsm_network" value="{{ vlsm_result.network }}">
+                            <button class="btn btn-green btn-sm" type="submit">⬇ Export PDF</button>
+                        </form>
+                    </div>
+                </div>
+
+                {% endif %}
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+
+<script>
+function switchTab(tab) {
+    document.querySelectorAll('.nav-item').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    event.currentTarget.classList.add('active');
+}
+
+const segColors = ['#4f8ef7','#3ecf8e','#f7c84f','#f76f6f','#b06ff7','#f7934f','#4ff7e8','#f74fb0'];
+let rowCount = 1;
+
+function addRow() {
+    const container = document.getElementById('requirements');
+    const color = segColors[rowCount % segColors.length];
+    const row = document.createElement('div');
+    row.className = 'req-row';
+    row.innerHTML = `
+        <input class="req-name" type="text" name="req_name" placeholder="Subnet name" style="border-left: 3px solid ${color};">
+        <input class="req-hosts" type="number" name="req_hosts" placeholder="Hosts" min="1">
+        <button type="button" class="remove-btn" onclick="removeRow(this)">×</button>
+    `;
+    container.appendChild(row);
+    rowCount++;
+}
+
+function removeRow(btn) {
+    const rows = document.querySelectorAll('.req-row');
+    if (rows.length > 1) btn.parentElement.remove();
+}
+</script>
+</body>
+</html>
+```
+
+---
+
+Also update `requirements.txt`:
+```
+flask
+reportlab
