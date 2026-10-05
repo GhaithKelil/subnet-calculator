@@ -1,61 +1,74 @@
+"""VLSM allocation: largest-first, smallest block that fits each requirement."""
+
 import ipaddress
-import math
+
+from calculator import host_range, parse_network
+
+
+def prefix_for_hosts(hosts):
+    """Smallest prefix length whose block holds `hosts` usable addresses."""
+    if hosts < 1:
+        raise ValueError("host count must be at least 1")
+    bits = (hosts + 1).bit_length()                    # ceil(log2(hosts + 2)); network + broadcast
+    if bits > 32:
+        raise ValueError(f"{hosts} hosts do not fit in IPv4")
+    return 32 - bits
+
 
 def vlsm_calculate(network_input, requirements):
-    try:
-        network = ipaddress.ip_network(network_input, strict=True)
-    except ValueError as e:
-        return {"error": str(e)}
+    """Allocate subnets inside `network_input`.
 
-    requirements = sorted(requirements, key=lambda x: x["hosts"], reverse=True)
+    requirements: list of {"name": str, "hosts": int}.
+    Returns a result dict. Raises ValueError on bad input or if the plan does not fit.
+    """
+    _, network = parse_network(network_input)
+    if not requirements:
+        raise ValueError("at least one requirement is needed")
+
+    ordered = sorted(requirements, key=lambda r: r["hosts"], reverse=True)
 
     results = []
     next_ip = int(network.network_address)
-    network_end = int(network.broadcast_address)
+    end = int(network.broadcast_address)
 
-    for req in requirements:
-        needed_hosts = req["hosts"]
-        bits = math.ceil(math.log2(needed_hosts + 2))
-        prefix = 32 - bits
+    for req in ordered:
+        needed = req["hosts"]
+        prefix = prefix_for_hosts(needed)
+        size = 1 << (32 - prefix)
 
-        subnet = ipaddress.ip_network(f"{ipaddress.ip_address(next_ip)}/{prefix}", strict=False)
+        # Largest-first keeps blocks aligned, but round up defensively.
+        next_ip = (next_ip + size - 1) // size * size
+        if next_ip + size - 1 > end:
+            raise ValueError(f"not enough space in {network} for '{req['name']}' ({needed} hosts)")
 
-        if int(subnet.broadcast_address) > network_end:
-            return {"error": f"Not enough space in {network_input} for all requirements"}
-
-        hosts = list(subnet.hosts())
-        usable = max(subnet.num_addresses - 2, 0)
-
+        subnet = ipaddress.IPv4Network((next_ip, prefix))
+        first, last, usable = host_range(subnet)
         results.append({
             "name": req["name"],
-            "needed_hosts": needed_hosts,
+            "needed_hosts": needed,
             "network": str(subnet.network_address),
             "broadcast": str(subnet.broadcast_address),
             "subnet_mask": str(subnet.netmask),
             "cidr": prefix,
-            "first_host": str(hosts[0]) if hosts else "N/A",
-            "last_host": str(hosts[-1]) if hosts else "N/A",
+            "first_host": str(first),
+            "last_host": str(last),
             "usable_hosts": usable,
-            "wasted": usable - needed_hosts,
-            "size": subnet.num_addresses
+            "wasted": usable - needed,
+            "size": subnet.num_addresses,
         })
-
-        next_ip = int(subnet.broadcast_address) + 1
+        next_ip += size
 
     total_needed = sum(r["needed_hosts"] for r in results)
-    total_allocated = sum(r["usable_hosts"] for r in results)
-    total_size = network.num_addresses
-    used_size = sum(r["size"] for r in results)
-
+    total_usable = sum(r["usable_hosts"] for r in results)
+    used = sum(r["size"] for r in results)
     return {
-        "error": None,
-        "network": network_input,
+        "network": str(network),
         "subnets": results,
         "total_needed": total_needed,
-        "total_allocated": total_allocated,
-        "total_wasted": total_allocated - total_needed,
-        "total_size": total_size,
-        "used_size": used_size,
-        "free_size": total_size - used_size,
-        "efficiency": round((total_needed / total_allocated) * 100, 1) if total_allocated else 0
+        "total_allocated": total_usable,
+        "total_wasted": total_usable - total_needed,
+        "total_size": network.num_addresses,
+        "used_size": used,
+        "free_size": network.num_addresses - used,
+        "efficiency": round(total_needed / total_usable * 100, 1) if total_usable else 0.0,
     }

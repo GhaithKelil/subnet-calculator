@@ -1,49 +1,75 @@
+"""Core IPv4 subnet maths. Pure functions, no I/O."""
+
 import ipaddress
 
-def calculate_subnet(ip_input):
+
+def parse_network(text):
+    """Parse '192.168.1.10/24', '192.168.1.10 255.255.255.0' or
+    '192.168.1.10/255.255.255.0' into (IPv4Address, IPv4Network).
+
+    Raises ValueError with a readable message on bad input.
+    """
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("input is empty")
+
+    if "/" in text:
+        addr, _, mask = text.partition("/")
+    elif " " in text:
+        addr, _, mask = text.partition(" ")
+    else:
+        addr, mask = text, "32"
+    addr, mask = addr.strip(), mask.strip()
+
     try:
-        network = ipaddress.ip_network(ip_input, strict=False)
-        ip = ipaddress.ip_address(ip_input.split("/")[0])
+        ip = ipaddress.IPv4Address(addr)
+    except ValueError:
+        raise ValueError(f"'{addr}' is not a valid IPv4 address") from None
 
-        usable_hosts = list(network.hosts())
-        first_host = usable_hosts[0] if usable_hosts else "N/A"
-        last_host = usable_hosts[-1] if usable_hosts else "N/A"
+    try:
+        network = ipaddress.IPv4Network(f"{ip}/{mask}", strict=False)
+    except ValueError:
+        raise ValueError(f"'{mask}' is not a valid prefix length or subnet mask") from None
 
-        is_private = ip.is_private
+    return ip, network
 
-        print("\n========== SUBNET CALCULATOR ==========")
-        print(f"  IP Address       : {ip}")
-        print(f"  Network Address  : {network.network_address}")
-        print(f"  Broadcast        : {network.broadcast_address}")
-        print(f"  Subnet Mask      : {network.netmask}")
-        print(f"  Wildcard Mask    : {network.hostmask}")
-        print(f"  CIDR Notation    : {network.prefixlen}")
-        print(f"  First Host       : {first_host}")
-        print(f"  Last Host        : {last_host}")
-        print(f"  Usable Hosts     : {network.num_addresses - 2}")
-        print(f"  IP Type          : {'Private' if is_private else 'Public'}")
-        print("========================================\n")
 
-    except ValueError as e:
-        print(f"Invalid input: {e}")
+def host_range(network):
+    """Return (first_host, last_host, usable_count) following RFC 3021 for /31 and /32."""
+    size = network.num_addresses
+    base = int(network.network_address)
+    if size == 1:                       # /32: single host
+        return network.network_address, network.network_address, 1
+    if size == 2:                       # /31: point-to-point, both usable
+        return network.network_address, network.broadcast_address, 2
+    return (ipaddress.IPv4Address(base + 1),
+            ipaddress.IPv4Address(base + size - 2),
+            size - 2)
 
-def main():
-    print("Subnet Calculator")
-    print("Enter IP with CIDR (e.g. 192.168.1.1/24) or IP and mask (e.g. 192.168.1.1 255.255.255.0)")
-    
-    while True:
-        user_input = input("\nEnter IP (or 'q' to quit): ").strip()
-        
-        if user_input.lower() == "q":
-            break
-        
-        if " " in user_input:
-            parts = user_input.split()
-            ip = parts[0]
-            mask = parts[1]
-            user_input = f"{ip}/{ipaddress.IPv4Network(f'0.0.0.0/{mask}').prefixlen}"
-        
-        calculate_subnet(user_input)
 
-if __name__ == "__main__":
-    main()
+def calculate_subnet(text):
+    """Return a dict describing the subnet for the given input."""
+    ip, network = parse_network(text)
+    first, last, usable = host_range(network)
+    return {
+        "ip": str(ip),
+        "network": str(network.network_address),
+        "broadcast": str(network.broadcast_address),
+        "subnet_mask": str(network.netmask),
+        "wildcard": str(network.hostmask),
+        "cidr": network.prefixlen,
+        "first_host": str(first),
+        "last_host": str(last),
+        "usable_hosts": usable,
+        "total_addresses": network.num_addresses,
+        "ip_type": "Private" if ip.is_private else "Public",
+        "binary_mask": ".".join(f"{o:08b}" for o in network.netmask.packed),
+    }
+
+
+def split_network(text, new_prefix):
+    """Split a network into equal subnets of /new_prefix. Returns a list of CIDR strings."""
+    _, network = parse_network(text)
+    if not network.prefixlen < new_prefix <= 32:
+        raise ValueError(f"new prefix must be larger than /{network.prefixlen} and at most /32")
+    return [str(s) for s in network.subnets(new_prefix=new_prefix)]
