@@ -3,10 +3,11 @@
 
 import argparse
 import csv
+import itertools
 import json
 import sys
 
-from calculator import calculate_subnet, split_network
+from calculator import calculate_subnet, iter_split
 from vlsm import vlsm_calculate
 
 SUBNET_FIELDS = [
@@ -61,22 +62,29 @@ def print_vlsm(result):
 
 
 def write_vlsm_csv(result, path):
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["Name", "Network", "CIDR", "Subnet Mask", "First Host", "Last Host",
-                    "Broadcast", "Usable Hosts", "Needed", "Wasted"])
-        for s in result["subnets"]:
-            w.writerow([s["name"], s["network"], f"/{s['cidr']}", s["subnet_mask"],
-                        s["first_host"], s["last_host"], s["broadcast"],
-                        s["usable_hosts"], s["needed_hosts"], s["wasted"]])
+    try:
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["Name", "Network", "CIDR", "Subnet Mask", "First Host", "Last Host",
+                        "Broadcast", "Usable Hosts", "Needed", "Wasted"])
+            for s in result["subnets"]:
+                w.writerow([s["name"], s["network"], f"/{s['cidr']}", s["subnet_mask"],
+                            s["first_host"], s["last_host"], s["broadcast"],
+                            s["usable_hosts"], s["needed_hosts"], s["wasted"]])
+    except OSError as e:
+        raise ValueError(f"could not save '{path}': {e.strerror}") from None
 
 
 def parse_requirements(items):
-    """Turn ['Sales=50', 'Eng:25'] into [{'name': 'Sales', 'hosts': 50}, ...]."""
+    """Turn ['Sales=50', 'Eng:25'] into [{'name': 'Sales', 'hosts': 50}, ...].
+
+    Splits on the last '=' or ':' so names like 'VLAN:10=50' keep their separators.
+    """
     reqs = []
     for item in items:
-        name, sep, count = item.replace(":", "=", 1).partition("=")
-        if not sep or not name.strip():
+        cut = max(item.rfind("="), item.rfind(":"))
+        name, count = item[:cut], item[cut + 1:]
+        if cut < 0 or not name.strip():
             raise ValueError(f"'{item}' should look like Name=Hosts, e.g. Sales=50")
         try:
             hosts = int(count)
@@ -99,7 +107,8 @@ def cmd_subnet(args):
 
 
 def cmd_split(args):
-    for cidr in split_network(args.network, args.prefix):
+    _, subnets = iter_split(args.network, args.prefix)
+    for cidr in subnets:
         print(cidr)
 
 
@@ -150,12 +159,12 @@ def interactive():
             elif choice == "3":
                 network = input("  Network (e.g. 10.0.0.0/16): ")
                 prefix = int(input("  New prefix length (e.g. 24): ").lstrip("/"))
-                subnets = split_network(network, prefix)
-                print(f"\n  {len(subnets)} subnets:")
-                for cidr in subnets[:64]:
+                count, subnets = iter_split(network, prefix)
+                print(f"\n  {count} subnets:")
+                for cidr in itertools.islice(subnets, 64):
                     print(f"    {cidr}")
-                if len(subnets) > 64:
-                    print(f"    ... and {len(subnets) - 64} more")
+                if count > 64:
+                    print(f"    ... and {count - 64} more")
             else:
                 print("  Please choose 1, 2, 3 or q.")
         except ValueError as e:

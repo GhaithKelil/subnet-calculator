@@ -34,7 +34,7 @@ Link   192.168.0.112/30  255.255.255.252  192.168.0.113 - 192.168.0.114  192.168
 
 | | |
 |---|---|
-| 🔍 **Subnet details** | Network, broadcast, mask, wildcard, host range, usable hosts, private or public, binary mask |
+| 🔍 **Subnet details** | Network, broadcast, mask, wildcard, host range, usable hosts, address type (private, public, loopback, CGNAT…), binary mask |
 | 📐 **VLSM planner** | Smallest block per requirement, largest first, with waste and efficiency reported |
 | ✂️ **Network splitter** | Cut any network into equal subnets |
 | 📤 **Export** | CSV for spreadsheets, JSON for scripts |
@@ -136,7 +136,7 @@ $ python cli.py
 python -m unittest -v
 ```
 
-11 tests cover input formats, `/31` and `/32`, invalid input, splitting, block sizing, ordering, overlap checks and oversized plans.
+15 tests cover input formats, `/31` and `/32`, address types, invalid input, splitting (including huge splits), block sizing, ordering, overlap checks, oversized plans, requirement parsing and CSV save errors.
 
 ## 🗂️ Project structure
 

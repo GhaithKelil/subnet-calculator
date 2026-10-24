@@ -2,6 +2,9 @@
 
 import ipaddress
 
+RFC1918 = [ipaddress.IPv4Network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")]
+SHARED = ipaddress.IPv4Network("100.64.0.0/10")    # RFC 6598 carrier-grade NAT
+
 
 def parse_network(text):
     """Parse '192.168.1.10/24', '192.168.1.10 255.255.255.0' or
@@ -47,6 +50,25 @@ def host_range(network):
             size - 2)
 
 
+def ip_type(ip):
+    """Classify an address: Private (RFC 1918), Public, or the special range it belongs to."""
+    if ip.is_unspecified:
+        return "Unspecified"
+    if ip.is_loopback:
+        return "Loopback"
+    if ip.is_link_local:
+        return "Link-local"
+    if ip.is_multicast:
+        return "Multicast"
+    if ip in SHARED:
+        return "Shared (CGNAT)"
+    if any(ip in n for n in RFC1918):
+        return "Private"
+    if not ip.is_global:
+        return "Reserved"
+    return "Public"
+
+
 def calculate_subnet(text):
     """Return a dict describing the subnet for the given input."""
     ip, network = parse_network(text)
@@ -62,14 +84,24 @@ def calculate_subnet(text):
         "last_host": str(last),
         "usable_hosts": usable,
         "total_addresses": network.num_addresses,
-        "ip_type": "Private" if ip.is_private else "Public",
+        "ip_type": ip_type(ip),
         "binary_mask": ".".join(f"{o:08b}" for o in network.netmask.packed),
     }
 
 
-def split_network(text, new_prefix):
-    """Split a network into equal subnets of /new_prefix. Returns a list of CIDR strings."""
+def iter_split(text, new_prefix):
+    """Split a network into equal subnets of /new_prefix.
+
+    Returns (count, iterator of CIDR strings). The iterator is lazy, so splitting
+    something like 0.0.0.0/0 into /32s does not build billions of strings up front.
+    """
     _, network = parse_network(text)
     if not network.prefixlen < new_prefix <= 32:
         raise ValueError(f"new prefix must be larger than /{network.prefixlen} and at most /32")
-    return [str(s) for s in network.subnets(new_prefix=new_prefix)]
+    count = 1 << (new_prefix - network.prefixlen)
+    return count, (str(s) for s in network.subnets(new_prefix=new_prefix))
+
+
+def split_network(text, new_prefix):
+    """Split a network into equal subnets of /new_prefix. Returns a list of CIDR strings."""
+    return list(iter_split(text, new_prefix)[1])
